@@ -1,0 +1,20 @@
+{
+    "name": "Cluster Classification",
+    "description": "Determines which input fields are most important for differentiating between clusters.",
+    "kind": "script",
+    "source_code": "script.whizzml",
+    "inputs": [
+        {
+            "name": "cluster-id",
+            "type": "cluster-id",
+            "description": "Cluster you wish to model"
+        }
+    ],
+    "outputs": [
+        {
+           "name": "importance-list",
+           "type": "list",
+           "description": "Importance of each field for cluster membership, most important last"
+        }
+    ]
+}
