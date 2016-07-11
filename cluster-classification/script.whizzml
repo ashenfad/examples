@@ -1,0 +1,56 @@
+;; Given a cluster, creates a batch centroid and uses the output dataset
+;; where each instance is labeled by centroid to create an ensemble (random forest), 
+;; and returns the importance of each field averaged over the ensemble.
+
+;; Given a cluster, returns the dataset that created that cluster appended with the cluster
+;; that instance came from.
+(define (label-by-cluster cl-id)
+  (let (cluster-ds (get-in (fetch cl-id) ["dataset"])
+        cluster-fields (get-in (fetch cl-id) ["input_fields"])
+        batchcentroid-id (create-and-wait-batchcentroid {"cluster" cl-id
+                                                         "dataset" cluster-ds
+                                                         "output_dataset" true
+                                                         "output_fields" cluster-fields}))
+    (get-in (fetch batchcentroid-id) ["output_dataset_resource"])))
+
+;; Given a list of pairs, creates the equivalent map
+(define (list-to-map nested-list)
+  (let (key-list (map head nested-list)
+        value-list (map (lambda (x) (nth x 1)) nested-list))
+    (make-map key-list value-list)))
+
+;; Given a function of two values and two maps, returns a new map where if a key appears 
+;; in only one of the original maps its value is unchanged, but if it appears in both its
+;; value is the function of the two original values.
+(define (merge-with fn map1 map2)
+  (let (subset-keys (filter (lambda (x) (contains? map1 x)) (keys map2))
+        subset-values (map (lambda (x) (fn (get map1 x) (get map2 x))) subset-keys)
+        subset (make-map subset-keys subset-values))
+    (merge map1 (merge map2 subset))))
+
+;; Given a cluster-id, builds a random forest on centroid membership, and returns a paired list of 
+;; field importance averaged across all models in the forest
+(define (cluster-classification cl-id)
+  (let (labeled (label-by-cluster cl-id)
+        _ (wait labeled)
+        cluster-ensemble (create-and-wait-ensemble {"dataset" labeled "randomize" true})
+        ensemble-models (get-in (fetch cluster-ensemble) ["models"])
+        list-of-importance (map (lambda (md-id) (get-in (fetch md-id) ["model" "importance"])) ensemble-models)
+        map-of-importance (map list-to-map list-of-importance)
+        summed-importance (reduce (lambda (x y) (merge-with + x y)) {} map-of-importance))
+    (map (lambda (x) (list (head x) (/ (get summed-importance (head x)) (count ensemble-models)))) summed-importance)))
+
+;; Given a list of ordered pairs [x, y], returns the list sorted by y
+(define (sort-by-value lst)
+  (let (pairs-are-maps (map (lambda (x) (make-map ["key" "value"] [(nth x 0) (nth x 1)])) lst)
+        sorted (sort-by-key "value" pairs-are-maps))
+    (map (lambda (x) (values x)) sorted)))
+
+;;
+(define importance-list (sort-by-value (cluster-classification cluster-id)))
+
+
+
+
+
+
